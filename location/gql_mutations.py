@@ -252,6 +252,7 @@ class HealthFacilityInputType(OpenIMISMutation.Input):
     phone = graphene.String(required=False)
     fax = graphene.String(required=False)
     email = graphene.String(required=False)
+    bank_account = graphene.String(required=False)
     care_type = graphene.String(required=True)
     services_pricelist_id = graphene.Int(required=False)
     items_pricelist_id = graphene.Int(required=False)

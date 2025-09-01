@@ -353,7 +353,11 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
     audit_user_id = models.IntegerField(db_column="AuditUserId", blank=True, null=True)
 
     def __str__(self):
-        return self.code + " " + self.name
+        # Ensure a plain Python string is always returned, even if code or name are None
+        code = self.code or ""
+        name = self.name or ""
+        # Strip to avoid trailing/leading spaces when one part is missing
+        return f"{code} {name}".strip()
 
     @classmethod
     def get_queryset(cls, queryset, user):
@@ -476,6 +480,10 @@ class HealthFacility(core_models.VersionedModel, core_models.ExtendableModel):
     fax = models.CharField(db_column="Fax", max_length=50, blank=True, null=True)
     email = models.CharField(db_column="eMail", max_length=50, blank=True, null=True)
 
+    bank_account = models.CharField(
+        db_column="BankAccount", max_length=50, blank=True, null=True
+    )
+
     care_type = models.CharField(db_column="HFCareType", max_length=1)
 
     services_pricelist = models.ForeignKey(
@@ -596,7 +604,17 @@ class UserDistrict(core_models.VersionedModel):
             cache_location_type = cache.get("location_types")
             cachedata = []
             if user.is_superuser:
-                for loc in cache_location_type['D']:
+                # Safely handle missing cache or missing 'D' key
+                d_type_ids = []
+                if isinstance(cache_location_type, dict):
+                    d_type_ids = list(cache_location_type.get('D', []))
+                # If cache does not contain districts, fallback to DB to avoid KeyError
+                if not d_type_ids:
+                    d_type_ids = list(
+                        Location.objects.filter(type="D", *filter_validity())
+                        .values_list("id", flat=True)
+                    )
+                for loc in d_type_ids:
                     cachedata.append([0, loc])
             elif not isinstance(user, core_models.InteractiveUser):
                 if isinstance(user, core_models.TechnicalUser):
