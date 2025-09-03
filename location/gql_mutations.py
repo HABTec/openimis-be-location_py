@@ -24,6 +24,7 @@ class LocationInputType(OpenIMISMutation.Input):
     other_population = graphene.Int(required=False)
     families = graphene.Int(required=False)
     parent_uuid = graphene.String(required=False)
+    bank_account = graphene.String(required=False)
 
 
 def update_or_create_location(data, user):
