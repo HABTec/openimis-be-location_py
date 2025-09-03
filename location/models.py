@@ -11,6 +11,7 @@ from django.db.models.signals import post_save, post_delete
 from django.db.models.expressions import RawSQL
 from core import models as core_models
 from graphql import ResolveInfo
+from promise.promise import MAX_LENGTH
 from .apps import LocationConfig
 import logging
 from django.db.models import Q
@@ -348,6 +349,7 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
         db_column="OtherPopulation", blank=True, null=True
     )
     families = models.IntegerField(db_column="Families", blank=True, null=True)
+    bank_account = models.CharField(db_column="BankAccount" , max_length=50 , blank=True , null=True)
 
     # rowid = models.TextField(db_column='RowId')
     audit_user_id = models.IntegerField(db_column="AuditUserId", blank=True, null=True)
