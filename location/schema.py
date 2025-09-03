@@ -13,7 +13,9 @@ from location.gql_mutations import (
     CreateLocationMutation,
     UpdateLocationMutation,
     DeleteLocationMutation,
-    MoveLocationMutation
+    MoveLocationMutation,
+    CreateHealthFacilityContractMutation,
+    UpdateHealthFacilityContractMutation,
 )
 from location.gql_queries import (
     UserDistrictGQLType,
@@ -27,6 +29,7 @@ from location.models import (
     UserDistrict,
     LocationMutation,
     HealthFacilityMutation,
+    HealthFacilityContract,
 )
 from location.services import LocationService, HealthFacilityService
 from location.apps import LocationConfig
@@ -79,6 +82,18 @@ class Query(graphene.ObjectType):
         health_facility_code=graphene.String(required=True),
         description="Checks that the specified health facility code is unique.",
     )
+    active_contracted_health_facilities = graphene.List(
+        HealthFacilityGQLType,
+        location_id=graphene.Int(required=True),
+        on_date=graphene.Date(required=False),
+        description="HF with an active contract for a location at given date (default today)",
+    )
+    expired_contracted_health_facilities = graphene.List(
+        HealthFacilityGQLType,
+        location_id=graphene.Int(required=True),
+        on_date=graphene.Date(required=False),
+        description="HF with a contract that expired before given date (default today)",
+    )
 
     def resolve_health_facilities(self, info, **kwargs):
         show_history = kwargs.get("showHistory", False) and info.context.user.has_perms(
@@ -103,6 +118,29 @@ class Query(graphene.ObjectType):
             raise PermissionDenied(_("unauthorized"))
         errors = LocationService.check_unique_code(code=kwargs["location_code"])
         return False if errors else True
+
+    def resolve_active_contracted_health_facilities(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        location_id = kwargs.get("location_id")
+        on_date = kwargs.get("on_date")
+        # Enforce row security on the requested location
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            if not Location.objects.is_allowed(info.context.user._u, [location_id]):
+                raise PermissionDenied(_("unauthorized"))
+        qs = HealthFacilityContract.active_health_facilities_for_location(location_id, on_date)
+        return gql_optimizer.query(qs, info)
+
+    def resolve_expired_contracted_health_facilities(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        location_id = kwargs.get("location_id")
+        on_date = kwargs.get("on_date")
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            if not Location.objects.is_allowed(info.context.user._u, [location_id]):
+                raise PermissionDenied(_("unauthorized"))
+        qs = HealthFacilityContract.expired_health_facilities_for_location(location_id, on_date)
+        return gql_optimizer.query(qs, info)
 
     def resolve_validate_health_facility_code(self, info, **kwargs):
         if not info.context.user.has_perms(
@@ -198,6 +236,8 @@ class Mutation(graphene.ObjectType):
     create_health_facility = CreateHealthFacilityMutation.Field()
     update_health_facility = UpdateHealthFacilityMutation.Field()
     delete_health_facility = DeleteHealthFacilityMutation.Field()
+    create_health_facility_contract = CreateHealthFacilityContractMutation.Field()
+    update_health_facility_contract = UpdateHealthFacilityContractMutation.Field()
 
 
 def on_location_mutation(sender, **kwargs):

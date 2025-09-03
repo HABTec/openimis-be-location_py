@@ -578,6 +578,96 @@ class HealthFacilityCatchment(models.Model):
         db_table = "tblHFCatchment"
 
 
+class HealthFacilityContract(models.Model):
+    id = models.AutoField(db_column="HFContractId", primary_key=True)
+    health_facility = models.ForeignKey(
+        HealthFacility, models.DO_NOTHING, db_column="HFID", related_name="contracts"
+    )
+    location = models.ForeignKey(
+        Location, models.DO_NOTHING, db_column="LocationId", related_name="hf_contracts"
+    )
+    start_date = models.DateTimeField(db_column="StartDate")
+    end_date = models.DateTimeField(db_column="EndDate", blank=True, null=True)
+    # Track the interactive admin user who created this relationship
+    created_by = models.ForeignKey(
+        core_models.InteractiveUser,
+        models.DO_NOTHING,
+        db_column="CreatedBy",
+        related_name="created_hf_contracts",
+    )
+    audit_user_id = models.IntegerField(db_column="AuditUserId", blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = "tblHFContract"
+        indexes = [
+            models.Index(fields=["location", "health_facility", "start_date", "end_date"], name="hf_contract_idx"),
+        ]
+        constraints = [
+            # Ensure only one contract row per HF/location pair (no history rows)
+            models.UniqueConstraint(
+                fields=["health_facility", "location"],
+                name="uq_hf_loc_contract",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Contract {self.health_facility_id} <-> {self.location_id} ({self.start_date} - {self.end_date or 'open'})"
+
+    @staticmethod
+    def active_on(date, prefix=""):
+        """Build a Q to filter contracts active at the given datetime (or date at 00:00:00)."""
+        from datetime import datetime, time as dtime
+
+        # Normalize to datetime at 00:00:00 if a date is provided
+        if hasattr(date, "hour"):
+            dt = date
+        else:
+            dt = datetime.combine(date, dtime.min)
+
+        p = f"{prefix}__" if prefix else ""
+        return Q(**{f"{p}start_date__lte": dt}) & (
+            Q(**{f"{p}end_date__isnull": True}) | Q(**{f"{p}end_date__gte": dt})
+        )
+
+    @classmethod
+    def active_health_facilities_for_location(cls, location_id, on_date=None):
+        from django.utils import timezone
+        from datetime import datetime, time as dtime
+
+        # Default to now, but normalize date -> datetime@00:00:00
+        if on_date is None:
+            on_date = timezone.now()
+        elif not hasattr(on_date, "hour"):
+            on_date = datetime.combine(on_date, dtime.min)
+        return (
+            HealthFacility.objects.filter(
+                contracts__location_id=location_id,
+            )
+            .filter(cls.active_on(on_date, prefix="contracts"))
+            .distinct()
+        )
+
+    @classmethod
+    def expired_health_facilities_for_location(cls, location_id, on_date=None):
+        from django.utils import timezone
+        from datetime import datetime, time as dtime
+
+        if on_date is None:
+            on_date = timezone.now()
+        elif not hasattr(on_date, "hour"):
+            on_date = datetime.combine(on_date, dtime.min)
+        return (
+            HealthFacility.objects.filter(
+                Q(contracts__location_id=location_id)
+                & (
+                    Q(contracts__end_date__lt=on_date)
+                    | Q(contracts__start_date__gt=on_date)
+                )
+            )
+            .distinct()
+        )
+
 class UserDistrict(core_models.VersionedModel):
     id = models.AutoField(db_column="UserDistrictID", primary_key=True)
     user = models.ForeignKey(
