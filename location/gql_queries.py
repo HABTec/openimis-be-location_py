@@ -14,6 +14,7 @@ from location.models import (
     HealthFacility,
     UserDistrict,
     OfficerVillage,
+    HealthFacilityContract,
 )
 from django.db.models import Field
 
@@ -77,6 +78,10 @@ class HealthFacilityCatchmentGQLType(DjangoObjectType):
     class Meta:
         model = HealthFacilityCatchment
 
+
+class HealthFacilityContractGQLType(DjangoObjectType):
+    class Meta:
+        model = HealthFacilityContract
 
 class HealthFacilityGQLType(DjangoObjectType):
     client_mutation_id = graphene.String()

@@ -2,7 +2,7 @@ import graphene
 from .apps import LocationConfig
 from core import assert_string_length, filter_validity
 from core.schema import OpenIMISMutation
-from .models import Location, HealthFacility, UserDistrict
+from .models import Location, HealthFacility, UserDistrict, HealthFacilityContract
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
@@ -292,6 +292,7 @@ class CreateHealthFacilityMutation(OpenIMISMutation):
 
             data["audit_user_id"] = user.id_for_audit
             from core.utils import TimeUtils
+            from datetime import datetime, time as dtime
 
             data["validity_from"] = TimeUtils.now()
             update_or_create_health_facility(data, user)
@@ -373,6 +374,116 @@ class DeleteHealthFacilityMutation(OpenIMISMutation):
                 {
                     "message": _("location.mutation.failed_to_delete_health_facility")
                     % {"code": data["code"]},
+                    "detail": str(exc),
+                }
+            ]
+
+
+class HealthFacilityContractInputType(OpenIMISMutation.Input):
+    id = graphene.Int(required=False)
+    health_facility_id = graphene.Int(required=True)
+    location_id = graphene.Int(required=True)
+    start_date = graphene.Date(required=True)
+    end_date = graphene.Date(required=False)
+
+
+class CreateHealthFacilityContractMutation(OpenIMISMutation):
+    _mutation_module = "location"
+    _mutation_class = "CreateHealthFacilityContractMutation"
+
+    class Input(HealthFacilityContractInputType):
+        pass
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if type(user) is AnonymousUser or not user.id:
+                raise ValidationError(_("mutation.authentication_required"))
+            # Reuse edit HF permission for contract management
+            if not user.has_perms(LocationConfig.gql_mutation_edit_health_facilities_perms):
+                raise PermissionDenied(_("unauthorized"))
+
+            # Validate foreign keys exist
+            HealthFacility.objects.get(id=data["health_facility_id"])  # noqa: F841
+            Location.objects.get(id=data["location_id"])  # noqa: F841
+
+            from core.utils import TimeUtils
+            from datetime import datetime, time as dtime
+
+            # Normalize to datetime@00:00:00
+            start_dt = data["start_date"]
+            if not hasattr(start_dt, "hour"):
+                start_dt = datetime.combine(start_dt, dtime.min)
+            end_dt = data.get("end_date")
+            if end_dt is not None and not hasattr(end_dt, "hour"):
+                end_dt = datetime.combine(end_dt, dtime.min)
+
+            # Upsert: ensure single row per (HF, location)
+            obj, created = HealthFacilityContract.objects.get_or_create(
+                health_facility_id=data["health_facility_id"],
+                location_id=data["location_id"],
+                defaults={
+                    "start_date": start_dt,
+                    "end_date": end_dt,
+                    "created_by": user._u if hasattr(user, "_u") else user,
+                    "audit_user_id": user.id_for_audit,
+                },
+            )
+            if not created:
+                obj.start_date = start_dt
+                obj.end_date = end_dt
+                obj.audit_user_id = user.id_for_audit
+                obj.save()
+            return None
+        except Exception as exc:
+            return [
+                {
+                    "message": _("location.mutation.failed_to_create_hf_contract"),
+                    "detail": str(exc),
+                }
+            ]
+
+
+class UpdateHealthFacilityContractMutation(OpenIMISMutation):
+    _mutation_module = "location"
+    _mutation_class = "UpdateHealthFacilityContractMutation"
+
+    class Input(OpenIMISMutation.Input):
+        id = graphene.Int(required=True)
+        start_date = graphene.Date(required=False)
+        end_date = graphene.Date(required=False)
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if type(user) is AnonymousUser or not user.id:
+                raise ValidationError(_("mutation.authentication_required"))
+            if not user.has_perms(LocationConfig.gql_mutation_edit_health_facilities_perms):
+                raise PermissionDenied(_("unauthorized"))
+
+            contract = HealthFacilityContract.objects.get(id=data["id"]) 
+            from datetime import datetime, time as dtime
+            changed = False
+            if "start_date" in data and data["start_date"] is not None:
+                start_dt = data["start_date"]
+                if not hasattr(start_dt, "hour"):
+                    start_dt = datetime.combine(start_dt, dtime.min)
+                contract.start_date = start_dt
+                changed = True
+            if "end_date" in data:
+                end_dt = data["end_date"]
+                if end_dt is not None and not hasattr(end_dt, "hour"):
+                    end_dt = datetime.combine(end_dt, dtime.min)
+                contract.end_date = end_dt
+                changed = True
+            if changed:
+                contract.audit_user_id = user.id_for_audit
+                contract.save()
+            return None
+        except Exception as exc:
+            return [
+                {
+                    "message": _("location.mutation.failed_to_update_hf_contract"),
                     "detail": str(exc),
                 }
             ]
