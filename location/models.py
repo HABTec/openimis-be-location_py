@@ -668,6 +668,46 @@ class HealthFacilityContract(models.Model):
             .distinct()
         )
 
+    @classmethod
+    def active_locations_for_health_facility(cls, health_facility_id, on_date=None):
+        from django.utils import timezone
+        from datetime import datetime, time as dtime
+
+        # Default to now; normalize date -> datetime@00:00:00
+        if on_date is None:
+            on_date = timezone.now()
+        elif not hasattr(on_date, "hour"):
+            on_date = datetime.combine(on_date, dtime.min)
+
+        return (
+            Location.objects.filter(
+                hf_contracts__health_facility_id=health_facility_id,
+            )
+            .filter(cls.active_on(on_date, prefix="hf_contracts"))
+            .distinct()
+        )
+
+    @classmethod
+    def expired_locations_for_health_facility(cls, health_facility_id, on_date=None):
+        from django.utils import timezone
+        from datetime import datetime, time as dtime
+
+        if on_date is None:
+            on_date = timezone.now()
+        elif not hasattr(on_date, "hour"):
+            on_date = datetime.combine(on_date, dtime.min)
+
+        return (
+            Location.objects.filter(
+                Q(hf_contracts__health_facility_id=health_facility_id)
+                & (
+                    Q(hf_contracts__end_date__lt=on_date)
+                    | Q(hf_contracts__start_date__gt=on_date)
+                )
+            )
+            .distinct()
+        )
+
 class UserDistrict(core_models.VersionedModel):
     id = models.AutoField(db_column="UserDistrictID", primary_key=True)
     user = models.ForeignKey(
