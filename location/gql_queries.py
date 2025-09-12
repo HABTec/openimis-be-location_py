@@ -21,6 +21,7 @@ from django.db.models import Field
 
 class LocationGQLType(DjangoObjectType):
     client_mutation_id = graphene.String()
+    bank_account = graphene.String()
     Field.register_lookup(NotEqual)
 
     def resolve_parent(self, info):
@@ -55,6 +56,18 @@ class LocationGQLType(DjangoObjectType):
         return (
             location_mutation.mutation.client_mutation_id if location_mutation else None
         )
+
+    def resolve_bank_account(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        # Return the bank account of the first active contracted HF for this location (ordered by code)
+        try:
+            qs = HealthFacilityContract.active_health_facilities_for_location(self.id)
+            hf = qs.order_by("code").first()
+            return hf.bank_account if hf else None
+        except Exception:
+            # Be resilient: never break the query because of this convenience field
+            return None
 
     @classmethod
     def get_queryset(cls, queryset, info):

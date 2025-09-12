@@ -94,6 +94,18 @@ class Query(graphene.ObjectType):
         on_date=graphene.Date(required=False),
         description="HF with a contract that expired before given date (default today)",
     )
+    active_contracted_locations = graphene.List(
+        LocationGQLType,
+        health_facility_id=graphene.Int(required=True),
+        on_date=graphene.Date(required=False),
+        description="Locations with an active contract for the given HF at the given date (default today)",
+    )
+    expired_contracted_locations = graphene.List(
+        LocationGQLType,
+        health_facility_id=graphene.Int(required=True),
+        on_date=graphene.Date(required=False),
+        description="Locations with a contract that is not active for the given HF at the given date (default today)",
+    )
 
     def resolve_health_facilities(self, info, **kwargs):
         show_history = kwargs.get("showHistory", False) and info.context.user.has_perms(
@@ -140,6 +152,37 @@ class Query(graphene.ObjectType):
             if not Location.objects.is_allowed(info.context.user._u, [location_id]):
                 raise PermissionDenied(_("unauthorized"))
         qs = HealthFacilityContract.expired_health_facilities_for_location(location_id, on_date)
+        return gql_optimizer.query(qs, info)
+
+    def resolve_active_contracted_locations(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        hf_id = kwargs.get("health_facility_id")
+        on_date = kwargs.get("on_date")
+        # Enforce row security based on the HF location
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            try:
+                hf = HealthFacility.objects.filter(validity_to__isnull=True).only("location_id").get(id=hf_id)
+            except HealthFacility.DoesNotExist:
+                return Location.objects.none()
+            if not Location.objects.is_allowed(info.context.user._u, [hf.location_id]):
+                raise PermissionDenied(_("unauthorized"))
+        qs = HealthFacilityContract.active_locations_for_health_facility(hf_id, on_date)
+        return gql_optimizer.query(qs, info)
+
+    def resolve_expired_contracted_locations(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        hf_id = kwargs.get("health_facility_id")
+        on_date = kwargs.get("on_date")
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            try:
+                hf = HealthFacility.objects.filter(validity_to__isnull=True).only("location_id").get(id=hf_id)
+            except HealthFacility.DoesNotExist:
+                return Location.objects.none()
+            if not Location.objects.is_allowed(info.context.user._u, [hf.location_id]):
+                raise PermissionDenied(_("unauthorized"))
+        qs = HealthFacilityContract.expired_locations_for_health_facility(hf_id, on_date)
         return gql_optimizer.query(qs, info)
 
     def resolve_validate_health_facility_code(self, info, **kwargs):
