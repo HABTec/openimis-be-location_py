@@ -100,9 +100,11 @@ class HealthFacilityGQLType(DjangoObjectType):
     client_mutation_id = graphene.String()
     # Expose region name explicitly as a plain string to avoid leaking Graphene scalar objects
     region = graphene.String()
+    # Database PK of the related location (LocationId)
+    location_id = graphene.Int(name="locationId")
 
     class Meta:
-        model = HealthFacility    # Expose region name explicitly as a plain string to avoid leaking Graphene scalar objects
+        model = HealthFacility
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
@@ -139,6 +141,12 @@ class HealthFacilityGQLType(DjangoObjectType):
         except Exception:
             return None
 
+    def resolve_location_id(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        # Return the raw FK integer to tblLocations
+        return getattr(self, "location_id", None)
+
     def resolve_catchments(self, info):
         if not info.context.user.has_perms(
             LocationConfig.gql_query_health_facilities_perms
@@ -166,15 +174,39 @@ class UserRegionGQLType(graphene.ObjectType):
     uuid = graphene.String()
     code = graphene.String()
     name = graphene.String()
+    # Database PK of the region (LocationId)
+    location_id = graphene.Int(name="locationId")
 
+    # Keep the Django model on a private attribute and resolve fields explicitly
     def __init__(self, region):
-        if region:
-            self.id = str(
-                base64.b64encode(f"LocationGQLType:{region.id}".encode()), "utf-8"
-            )
-            self.uuid = region.uuid
-            self.code = region.code
-            self.name = region.name
+        self._region = region
+
+    def resolve_id(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        if not self._region:
+            return None
+        return str(base64.b64encode(f"LocationGQLType:{self._region.id}".encode()), "utf-8")
+
+    def resolve_uuid(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._region, "uuid", None)
+
+    def resolve_code(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._region, "code", None)
+
+    def resolve_name(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._region, "name", None)
+
+    def resolve_location_id(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._region, "id", None)
 
 
 class UserDistrictGQLType(graphene.ObjectType):
@@ -183,17 +215,50 @@ class UserDistrictGQLType(graphene.ObjectType):
     code = graphene.String()
     name = graphene.String()
     parent = graphene.Field(UserRegionGQLType)
+    # Database PK of the district location (LocationId)
+    location_id = graphene.Int(name="locationId")
 
+    # Keep the Django model on a private attribute and resolve fields explicitly
     def __init__(self, district):
-        if district:
-            self.id = str(
-                base64.b64encode(f"LocationGQLType:{district.location_id}".encode()),
-                "utf-8",
-            )
-            self.uuid = district.location.uuid
-            self.code = district.location.code
-            self.name = district.location.name
-            self.parent = UserRegionGQLType(district.location.parent)
+        self._district = district
+
+    def resolve_id(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        if not self._district:
+            return None
+        return str(
+            base64.b64encode(f"LocationGQLType:{self._district.location_id}".encode()),
+            "utf-8",
+        )
+
+    def resolve_uuid(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._district.location, "uuid", None) if self._district else None
+
+    def resolve_code(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._district.location, "code", None) if self._district else None
+
+    def resolve_name(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._district.location, "name", None) if self._district else None
+
+    def resolve_parent(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        if not self._district:
+            return None
+        parent = getattr(self._district.location, "parent", None)
+        return UserRegionGQLType(parent) if parent else None
+
+    def resolve_location_id(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        return getattr(self._district, "location_id", None) if self._district else None
 
 
 class UserDistrictType(DjangoObjectType):
