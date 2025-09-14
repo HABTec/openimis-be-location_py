@@ -98,9 +98,11 @@ class HealthFacilityContractGQLType(DjangoObjectType):
 
 class HealthFacilityGQLType(DjangoObjectType):
     client_mutation_id = graphene.String()
+    # Expose region name explicitly as a plain string to avoid leaking Graphene scalar objects
+    region = graphene.String()
 
     class Meta:
-        model = HealthFacility
+        model = HealthFacility    # Expose region name explicitly as a plain string to avoid leaking Graphene scalar objects
         interfaces = (graphene.relay.Node,)
         filter_fields = {
             "id": ["exact"],
@@ -124,6 +126,18 @@ class HealthFacilityGQLType(DjangoObjectType):
             raise PermissionDenied(_("unauthorized"))
         if "location_loader" in info.context.dataloaders:
             return info.context.dataloaders["location_loader"].load(self.location_id)
+
+    def resolve_region(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        try:
+            # Region is the parent of the district (HF is linked to a district location)
+            # Return a native Python string (name) rather than a Graphene scalar
+            if self.location and self.location.parent:
+                return self.location.parent.name or ""
+            return None
+        except Exception:
+            return None
 
     def resolve_catchments(self, info):
         if not info.context.user.has_perms(
