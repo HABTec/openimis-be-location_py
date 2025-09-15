@@ -169,44 +169,26 @@ class HealthFacilityGQLType(DjangoObjectType):
         )
 
 
-class UserRegionGQLType(graphene.ObjectType):
+class UserRegionGQLType(DjangoObjectType):
+    # Explicitly expose fields we need; customize id and location_id resolutions
     id = graphene.String()
-    uuid = graphene.String()
-    code = graphene.String()
-    name = graphene.String()
-    # Database PK of the region (LocationId)
     location_id = graphene.Int(name="locationId")
 
-    # Keep the Django model on a private attribute and resolve fields explicitly
-    def __init__(self, region):
-        self._region = region
+    class Meta:
+        model = Location
+        fields = ("uuid", "code", "name")
 
     def resolve_id(self, info):
         if not info.context.user.is_authenticated:
             raise PermissionDenied(_("unauthorized"))
-        if not self._region:
+        if not self:
             return None
-        return str(base64.b64encode(f"LocationGQLType:{self._region.id}".encode()), "utf-8")
-
-    def resolve_uuid(self, info):
-        if not info.context.user.is_authenticated:
-            raise PermissionDenied(_("unauthorized"))
-        return getattr(self._region, "uuid", None)
-
-    def resolve_code(self, info):
-        if not info.context.user.is_authenticated:
-            raise PermissionDenied(_("unauthorized"))
-        return getattr(self._region, "code", None)
-
-    def resolve_name(self, info):
-        if not info.context.user.is_authenticated:
-            raise PermissionDenied(_("unauthorized"))
-        return getattr(self._region, "name", None)
+        return str(base64.b64encode(f"LocationGQLType:{self.id}".encode()), "utf-8")
 
     def resolve_location_id(self, info):
         if not info.context.user.is_authenticated:
             raise PermissionDenied(_("unauthorized"))
-        return getattr(self._region, "id", None)
+        return getattr(self, "id", None)
 
 
 class UserDistrictGQLType(graphene.ObjectType):
@@ -253,7 +235,8 @@ class UserDistrictGQLType(graphene.ObjectType):
         if not self._district:
             return None
         parent = getattr(self._district.location, "parent", None)
-        return UserRegionGQLType(parent) if parent else None
+        # Return the raw Location model instance; DjangoObjectType will serialize it
+        return parent if parent else None
 
     def resolve_location_id(self, info):
         if not info.context.user.is_authenticated:
