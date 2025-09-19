@@ -95,6 +95,35 @@ class HealthFacilityCatchmentGQLType(DjangoObjectType):
 class HealthFacilityContractGQLType(DjangoObjectType):
     class Meta:
         model = HealthFacilityContract
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "health_facility__id": ["exact"],
+            "health_facility__uuid": ["exact"],
+            "health_facility__code": ["exact", "istartswith", "icontains"],
+            "health_facility__name": ["exact", "istartswith", "icontains"],
+            "location__id": ["exact"],
+            "location__uuid": ["exact"],
+            "location__code": ["exact", "istartswith", "icontains"],
+            "location__name": ["exact", "istartswith", "icontains"],
+            "start_date": ["exact", "lt", "lte", "gt", "gte"],
+            "end_date": ["exact", "lt", "lte", "gt", "gte", "isnull"],
+            "created_by__id": ["exact"],
+        }
+    
+    def resolve_health_facility(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        if "health_facility_loader" in info.context.dataloaders:
+            return info.context.dataloaders["health_facility_loader"].load(self.health_facility_id)
+        return self.health_facility
+    
+    def resolve_location(self, info):
+        if not info.context.user.is_authenticated:
+            raise PermissionDenied(_("unauthorized"))
+        if "location_loader" in info.context.dataloaders:
+            return info.context.dataloaders["location_loader"].load(self.location_id)
+        return self.location
 
 class HealthFacilityGQLType(DjangoObjectType):
     client_mutation_id = graphene.String()
