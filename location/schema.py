@@ -21,6 +21,7 @@ from location.gql_queries import (
     UserDistrictGQLType,
     LocationGQLType,
     HealthFacilityGQLType,
+    HealthFacilityContractGQLType,
 )
 from location.models import (
     HealthFacility,
@@ -105,6 +106,31 @@ class Query(graphene.ObjectType):
         health_facility_id=graphene.Int(required=True),
         on_date=graphene.Date(required=False),
         description="Locations with a contract that is not active for the given HF at the given date (default today)",
+    )
+    health_facility_contracts = OrderedDjangoFilterConnectionField(
+        HealthFacilityContractGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        description="Get all health facility-location contracts",
+    )
+    health_facility_contracts_by_location = graphene.List(
+        HealthFacilityContractGQLType,
+        location_id=graphene.Int(required=True),
+        description="Get all health facility contracts for a specific location",
+    )
+    health_facility_contract = graphene.Field(
+        HealthFacilityContractGQLType,
+        contract_id=graphene.Int(required=True),
+        description="Get a single health facility contract by contract ID",
+    )
+    health_facility_uuid = graphene.Field(
+        graphene.String,
+        hf_id=graphene.Int(required=True),
+        description="Get health facility UUID by health facility ID",
+    )
+    health_facility_by_id = graphene.Field(
+        HealthFacilityGQLType,
+        hf_id=graphene.Int(required=True),
+        description="Get complete health facility information by health facility ID",
     )
 
     def resolve_health_facilities(self, info, **kwargs):
@@ -269,6 +295,101 @@ class Query(graphene.ObjectType):
                 type=kwargs["location_type"]
             )
         return current_officer.officer_allowed_locations
+
+    def resolve_health_facility_contracts(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        if not info.context.user.has_perms(LocationConfig.gql_query_health_facilities_perms):
+            raise PermissionDenied(_("unauthorized"))
+        
+        query = HealthFacilityContract.objects.all()
+        
+        # Apply row security if enabled
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            query = LocationManager().build_user_location_filter_query(
+                info.context.user._u, queryset=query, prefix="location"
+            )
+        
+        return gql_optimizer.query(query, info)
+
+    def resolve_health_facility_contracts_by_location(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        if not info.context.user.has_perms(LocationConfig.gql_query_health_facilities_perms):
+            raise PermissionDenied(_("unauthorized"))
+        
+        location_id = kwargs.get("location_id")
+        
+        # Enforce row security on the requested location
+        if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+            if not Location.objects.is_allowed(info.context.user._u, [location_id]):
+                raise PermissionDenied(_("unauthorized"))
+        
+        query = HealthFacilityContract.objects.filter(location_id=location_id)
+        return gql_optimizer.query(query, info)
+
+    def resolve_health_facility_contract(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        if not info.context.user.has_perms(LocationConfig.gql_query_health_facilities_perms):
+            raise PermissionDenied(_("unauthorized"))
+        
+        contract_id = kwargs.get("contract_id")
+        
+        try:
+            contract = HealthFacilityContract.objects.get(id=contract_id)
+            
+            # Enforce row security on the contract's location
+            if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+                if not Location.objects.is_allowed(info.context.user._u, [contract.location_id]):
+                    raise PermissionDenied(_("unauthorized"))
+            
+            return contract
+        except HealthFacilityContract.DoesNotExist:
+            return None
+
+    def resolve_health_facility_uuid(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        if not info.context.user.has_perms(LocationConfig.gql_query_health_facilities_perms):
+            raise PermissionDenied(_("unauthorized"))
+        
+        hf_id = kwargs.get("hf_id")
+        
+        try:
+            health_facility = HealthFacility.objects.get(id=hf_id)
+            
+            # Enforce row security on the health facility's location
+            if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+                if not Location.objects.is_allowed(info.context.user._u, [health_facility.location_id]):
+                    raise PermissionDenied(_("unauthorized"))
+            
+            return health_facility.uuid
+        except HealthFacility.DoesNotExist:
+            return None
+
+    def resolve_health_facility_by_id(self, info, **kwargs):
+        if info.context.user.is_anonymous:
+            raise PermissionDenied(_("unauthorized"))
+        if not info.context.user.has_perms(LocationConfig.gql_query_health_facilities_perms):
+            raise PermissionDenied(_("unauthorized"))
+        
+        hf_id = kwargs.get("hf_id")
+        
+        try:
+            health_facility = HealthFacility.objects.select_related(
+                'location', 'location__parent', 'legal_form', 'sub_level',
+                'services_pricelist', 'items_pricelist'
+            ).get(id=hf_id)
+            
+            # Enforce row security on the health facility's location
+            if settings.ROW_SECURITY and not info.context.user._u.is_superuser:
+                if not Location.objects.is_allowed(info.context.user._u, [health_facility.location_id]):
+                    raise PermissionDenied(_("unauthorized"))
+            
+            return health_facility
+        except HealthFacility.DoesNotExist:
+            return None
 
 
 class Mutation(graphene.ObjectType):
