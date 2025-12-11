@@ -238,7 +238,7 @@ class LocationManager(CachedManager):
             [loc in extend_allowed_locations(allowed, strict) for loc in locations_id]
         )
 
-    def get_with_parents(location_ids):
+def get_with_parents(location_ids):
         all_ids = set(location_ids)
         current = list(location_ids)
 
