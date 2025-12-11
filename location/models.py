@@ -222,7 +222,7 @@ class LocationManager(CachedManager):
                         ).first(),
                         *filter_validity(),
                     ).values_list("location_id", flat=True)
-                )                
+                )
             else:
                 allowed = [
                     d.location_id for d in UserDistrict(user).get_user_districts(user)
