@@ -186,7 +186,7 @@ class LocationManager(CachedManager):
                 (
                     f"{prefix}__in",
                     extend_allowed_locations(
-                        self.get_allowed_ids(user), True, loc_types
+                        self.get_allowed_ids(user), False, loc_types
                     ),
                 )
             ) | Q((f"{prefix}__isnull", True))
@@ -215,7 +215,7 @@ class LocationManager(CachedManager):
             if user.is_claim_admin and user.health_facility:
                 allowed = [user.health_facility.location_id]
             elif user.is_officer:
-                allowed = get_with_parents(
+                allowed = list(
                     OfficerVillage.objects.filter(
                         officer=core_models.Officer.objects.filter(
                             code=user.login_name, *filter_validity()
@@ -237,25 +237,6 @@ class LocationManager(CachedManager):
         return all(
             [loc in extend_allowed_locations(allowed, strict) for loc in locations_id]
         )
-
-def get_with_parents(location_ids):
-        all_ids = set(location_ids)
-        current = list(location_ids)
-
-        while current:
-            parent_ids = Location.objects.filter(id__in=current)\
-                .values_list("parent_id", flat=True)
-
-            parent_ids = [p for p in parent_ids if p]
-            new = set(parent_ids) - all_ids
-
-            if not new:
-                break
-
-            all_ids.update(new)
-            current = list(new)
-
-        return list(all_ids)
 
 def cache_location_graph(location_id=None):
     """Cache the location graph as a dictionary of edges."""
