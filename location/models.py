@@ -324,7 +324,7 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
         db_column="LocationUUID", max_length=36, default=uuid.uuid4, unique=True
     )
     code = models.CharField(
-        db_column="LocationCode", max_length=50, blank=True, null=True
+        db_column="LocationCode", max_length=50, blank=True, unique=True
     )
     name = models.CharField(
         db_column="LocationName", max_length=50, blank=True, null=True
