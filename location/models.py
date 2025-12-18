@@ -778,10 +778,11 @@ class UserDistrict(core_models.VersionedModel):
                     logger.warning(f"district  {d[0]}:{d[1]} does not use a cached location")
                     missing_location_ids.add(d[1])
                 else:
-                    if location.parent_id:
+                    if location.parent_id is not None:
+                        parent_id = location.parent_id
                         location.parent = cache.get(f"location_{location.parent_id}")
                         if location.parent is None:
-                            location.parent = Location.objects.get(id=location.parent_id)
+                            location.parent = Location.objects.get(id=parent_id)
                             if location.parent is not None:
                                 cache.set(
                                     f"location_{location.parent_id}",
