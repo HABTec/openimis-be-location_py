@@ -780,6 +780,14 @@ class UserDistrict(core_models.VersionedModel):
                 else:
                     if location.parent_id:
                         location.parent = cache.get(f"location_{location.parent_id}")
+                        if location.parent is None:
+                            location.parent = Location.objects.get(id=location.parent_id)
+                            if location.parent is not None:
+                                cache.set(
+                                    f"location_{location.parent_id}",
+                                    location.parent,
+                                    timeout=None,
+                                )
                     districts.append(UserDistrict(id=d[0], user=user, location=location))
 
             if missing_location_ids:
