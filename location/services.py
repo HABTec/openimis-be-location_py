@@ -249,3 +249,4 @@ class HealthFacilityService:
         hf.care_type = None
         hf.services_pricelist = None
         hf.items_pricelist = None
+        hf.lab_services_pricelist = None 

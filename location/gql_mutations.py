@@ -257,6 +257,7 @@ class HealthFacilityInputType(OpenIMISMutation.Input):
     care_type = graphene.String(required=True)
     services_pricelist_id = graphene.Int(required=False)
     items_pricelist_id = graphene.Int(required=False)
+    lab_services_pricelist_id = graphene.Int(required=False)
     offline = graphene.Boolean(required=False)
     catchments = graphene.List(HealthFacilityCatchmentInputType, required=False)
     contract_start_date = graphene.Date(required=False)

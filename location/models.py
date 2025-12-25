@@ -503,6 +503,14 @@ class HealthFacility(core_models.VersionedModel, core_models.ExtendableModel):
         null=True,
         related_name="health_facilities",
     )
+    lab_services_pricelist = models.ForeignKey(
+        "medical_pricelist.LaboratoryServicesPricelist",
+        models.DO_NOTHING,
+        db_column="PLLabServiceID",
+        blank=True,
+        null=True,
+        related_name="health_facilities",
+    )
     offline = models.BooleanField(db_column="OffLine", default=False)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column="AuditUserID")
